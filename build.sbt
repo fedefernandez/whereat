@@ -49,11 +49,11 @@ libraryDependencies ++= Seq(
   "com.google.android.gms" % "play-services" % "6.5.87",
   "io.taig" %% "communicator" % "2.0.1",
   "com.typesafe.play" %% "play-json" % "2.3.4",
-//  "org.specs2" %% "specs2-core" % "3.6-scalaz-7.0.7" % "test",
-//  "org.specs2" %% "specs2-mock" % "3.6-scalaz-7.0.7" % "test",
-//  "org.specs2" %% "specs2-junit" % "3.6-scalaz-7.0.7" % "test",
-  "org.specs2" %% "specs2-core" % "2.4.15" % "test",
-  "org.specs2" %% "specs2-mock" % "3.0-M2" % "test",
+  "org.specs2" %% "specs2-core" % "3.6-scalaz-7.0.7" % "test",
+  "org.specs2" %% "specs2-mock" % "3.6-scalaz-7.0.7" % "test",
+  "org.specs2" %% "specs2-junit" % "3.6-scalaz-7.0.7" % "test",
+//  "org.specs2" %% "specs2-core" % "2.4.15" % "test",
+//  "org.specs2" %% "specs2-mock" % "3.0-M2" % "test",
   "com.google.android" % "android" % "4.1.1.4" % "test",
   compilerPlugin("org.brianmckenna" %% "wartremover" % "0.10")
 )
