@@ -6,10 +6,10 @@ import macroid.AppContext
 import io.taig.communicator.internal.result.Parser
 import org.tlc.whereat.model.{Intersection, ApiIntersection, Loc}
 import org.tlc.whereat.msg.IntersectionResponse
+import org.tlc.whereat.support.AsyncUtils._
 import org.tlc.whereat.support.BaseTestSpecification
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 
 /**
  * Author: @aguestuser
@@ -68,10 +68,8 @@ class IntersectionServiceSpec extends IntersectionSpecification {
       override def reqJson[T](url: String)(implicit parser: Parser[T], client: OkHttpClient = new OkHttpClient()): Future[T] =
         Future.successful[T](validIntersection.asInstanceOf[T])
 
-      Await.result(getIntersection(rcLocReq), Duration.Inf) shouldEqual
+      requestGeocode(rcLocReq) *===
         IntersectionResponse(Some(Intersection(street1 = "Broadway", street2 = "Grand St")))
     }
-
   }
-
 }

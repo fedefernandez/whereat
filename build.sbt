@@ -1,5 +1,14 @@
-//import android.Dependencies.aar
-//import android.Keys._
+import android.Dependencies.aar
+import android.Keys.{
+  platformTarget,
+  Android,
+  proguardScala,
+  useProguard,
+  proguardOptions,
+  apkbuildExcludes,
+  dexMaxHeap,
+  proguardCache,
+  ProguardCache}
 
 //MACROID STUFF//
 
@@ -39,7 +48,10 @@ useProguard in Android := true
 // Set proguard options
 proguardOptions in Android ++= Seq(
   "-ignorewarnings",
-  "-keep class scala.Dynamic")
+  "-keep class scala.Dynamic"
+)
+
+dexMaxHeap in Android := "2048m"
 
 libraryDependencies ++= Seq(
   aar("org.macroid" %% "macroid" % "2.0.0-M4"),
@@ -56,6 +68,18 @@ libraryDependencies ++= Seq(
 //  "org.specs2" %% "specs2-mock" % "3.0-M2" % "test",
   "com.google.android" % "android" % "4.1.1.4" % "test",
   compilerPlugin("org.brianmckenna" %% "wartremover" % "0.10")
+)
+
+
+proguardCache in Android ++= Seq(
+//  ProguardCache("macroid") % "org.macroid" % "macroid_2.11",
+//  ProguardCache("macroid-viewable") % "org.macroid" % "macroid-viewable_2.11",
+//  ProguardCache("support-v4") % "com.android.support" % "support-v4",
+//  ProguardCache("macroid-extras") % "com.fortysevendeg" % "macroid-extras_2.11",
+  ProguardCache("com.google") % "com.google.android.gms" % "play-services",
+  ProguardCache("io.taig.communicator") % "io.taig" % "communicator_2.11",
+  ProguardCache("play.api.libs.json") % "com.typesafe.play"  % "play-json_2.11",
+  ProguardCache("play.api.libs.functional") % "com.typesafe.play" % "play-functional_2.11"
 )
 
 apkbuildExcludes in Android ++= Seq (

@@ -1,19 +1,16 @@
 package org.tlc.whereat.activities
 
 import android.app.Activity
-import android.location.Location
+import android.content.{ComponentName, Intent}
 import android.os.Bundle
-import android.util.Log
+import android.provider.ContactsContract.CommonDataKinds
+import android.telephony.SmsManager
 import android.widget.{Button, LinearLayout, TextView}
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.api.GoogleApiClient
-import com.google.android.gms.common.api.GoogleApiClient.{ConnectionCallbacks, OnConnectionFailedListener}
-import com.google.android.gms.location.LocationServices
-import macroid.{AppContext, Contexts}
 import macroid.FullDsl._
-import org.tlc.whereat.model.{Conversions, Loc}
-import org.tlc.whereat.msg.IntersectionResponse
-import org.tlc.whereat.services.IntersectionService
+import macroid._
+import org.tlc.whereat.model.Conversions
+import org.tlc.whereat.msg.Logger
+import org.tlc.whereat.services.{GoogleApiService, IntersectionService}
 import org.tlc.whereat.ui.tweaks.MainTweaks
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -28,85 +25,102 @@ import scala.concurrent.{Future, Promise}
 
 class MainActivity extends Activity
   with Contexts[Activity]
-  with ConnectionCallbacks
-  with OnConnectionFailedListener
-  with Conversions {
+  with GoogleApiService
+  with IntersectionService
+  with Conversions
+  with Logger {
 
   implicit lazy val appContextProvider: AppContext = activityAppContext
-  var apiClient: Option[GoogleApiClient] = None
-  var locView: Option[TextView] = slot[TextView]
-  var connectionPromise = Promise[Unit]()
-  val TAG = "whereat"
+
+  var intersectionTextView = slot[TextView]
+  var getContactsButton = slot[Button]
+  var phoneNumberTextView = slot[TextView]
+  var shareLocationButton = slot[Button]
+  var successMessage = slot[TextView]
 
   // Activy UI & life cycle methods
 
   override protected def onCreate(savedInstanceState: Bundle): Unit = {
     super .onCreate(savedInstanceState)
 
-    apiClient = buildClient
+    gApiClient = buildGoogleApiClient(this)
 
     setContentView {
       getUi {
         l[LinearLayout](
           w[Button] <~
             text("Get Location") <~
-            On.click { locView <~ getIntersection.map { i ⇒ text(i) + show } },
+            On.click {
+              (intersectionTextView <~~ getIntersection.map { fadeInText }) ~~
+              (getContactsButton <~~ fadeIn(100))
+            },
           w[TextView] <~
-            wire(locView) <~ hide
+            wire(intersectionTextView) <~ hide,
+          w[Button] <~
+            wire(getContactsButton) <~ hide <~ text("Get Contacts") <~
+            On.click { 
+              (phoneNumberTextView <~~ getPhoneNumber.map { fadeInText }) ~~
+              (shareLocationButton <~~ fadeIn(100))
+            },
+          w[TextView] <~
+            wire(phoneNumberTextView) <~ hide, 
+          w[Button] <~
+            wire(shareLocationButton) <~ hide <~ text("Share Location") <~
+            On.click {
+              successMessage <~~ sendSms.map(_ ⇒ show)
+            },
+          w[TextView] <~
+            wire(successMessage) <~ hide <~ text("Success!")
         ) <~ MainTweaks.orient } } }
+
+  def fadeInText(str: String): Snail[TextView] = text(str) ++ fadeIn(100)
+  def showText(str: String): Tweak[TextView] = text(str) + show
 
   override protected def onStart(): Unit = {
     super.onStart()
-    apiClient foreach { _.connect } }
+    gApiClient foreach { _.connect } }
 
   override protected def onStop(): Unit = {
     super.onStop()
-    apiClient foreach { cl ⇒ if(cl.isConnected) cl.disconnect() } }
+    gApiClient foreach { cl ⇒ if(cl.isConnected) cl.disconnect() } }
 
-  // Location API Client builder & callbacks
-
-  protected def buildClient: Option[GoogleApiClient] = {
-    connectionPromise = Promise()
-    synchronized {
-      Some(
-        new GoogleApiClient.Builder(this)
-          .addConnectionCallbacks(this)
-          .addOnConnectionFailedListener(this)
-          .addApi(LocationServices.API)
-          .build()) } }
-
-  override def onConnected(connectionHint: Bundle): Unit =
-    connectionPromise.trySuccess(())
-
-  override def onConnectionFailed(res: ConnectionResult): Unit = {
-    connectionPromise = Promise()
-    Log.i(TAG, "Connection failed: ConnectionResult.getErrorCode() = " + res.getErrorCode) }
-
-  override def onConnectionSuspended(cause: Int) {
-    connectionPromise = Promise()
-    Log.i(TAG, "Connection suspended")
-    apiClient foreach { _.connect } }
-
-  // Location & Geocoder API calls
+  // location sharing
 
   def getIntersection: Future[String] =
     getLocation flatMap {
-      case Some(l) ⇒
-        Log.i(TAG, s"Location retrieved: $l")
-        geocodeLocation(toLoc(l)) map parseGeocoding
-      case None ⇒ Future.successful ("Location not available") }
+      case None ⇒ Future.successful("Location not available") //Future.successful ("Location not available")
+      case Some(l) ⇒ geocodeLocation(toLoc(l)) map parseGeocoding }
 
-  private def getLocation: Future[Option[Location]] =
-    connectionPromise.future map { _ ⇒
-      apiClient flatMap { cl ⇒
-        Option(LocationServices.FusedLocationApi.getLastLocation(cl)) } }
+  // contact intent passing
+  // TODO extract this to a trait!
 
-  def geocodeLocation(l: Loc): Future[IntersectionResponse] =
-    IntersectionService.getIntersection(toIntersectionRequest(l)) //TODO do i need to pass an AppContext here?
+  var phoneNumberPromise: Promise[String] = Promise()
+  val REQUEST_SELECT_PHONE_NUMBER = 1
+  val RESULT_OK = -1
 
-  def parseGeocoding(res: IntersectionResponse): String = res.maybe match {
-    case Some(i) ⇒ i.toString
-    case None ⇒ "Location not available" }
+  def getPhoneNumber: Future[String] = {
+    val intent = new Intent(Intent.ACTION_PICK).setType(CommonDataKinds.Phone.CONTENT_TYPE)
+    resolve(intent) foreach  { _ ⇒ startActivityForResult(intent, REQUEST_SELECT_PHONE_NUMBER) }
+    phoneNumberPromise.future }
 
+  protected override def onActivityResult(requestCode: Int, resultCode: Int, data: Intent): Unit = {
+    if (requestCode == REQUEST_SELECT_PHONE_NUMBER && resultCode == RESULT_OK) {
+      val (uri, projection) = (data.getData, Array(CommonDataKinds.Phone.NUMBER))
+      val cursor = getContentResolver.query(uri, projection, null, null, null)
+      if (cursor != null && cursor.moveToFirst()) {
+        val numberIndex = cursor.getColumnIndex(CommonDataKinds.Phone.NUMBER)
+        phoneNumberPromise.success { cursor.getString(numberIndex) } } } }
+
+  // sms intent passing
+  // TODO implement this and extract it to a trait!
+
+  def sendSms: Future[Unit] = {
+    phoneNumberPromise.future flatMap { recipient ⇒
+      intersectionPromise.future flatMap { msg ⇒
+        SmsManager.getDefault.sendTextMessage(recipient, null, msg, null, null)
+        Future.successful(()) } } }
+
+  def resolve(intent: Intent): Option[ComponentName] =
+    Option(intent.resolveActivity(getPackageManager))
 }
 
