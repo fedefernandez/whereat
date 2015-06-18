@@ -63,7 +63,7 @@ class IntersectionServiceSpec extends IntersectionSpecification {
 
   "Intersection Service" should {
 
-    "parse intersection from JSON" in new IntersectionSupport {
+    "parse intersection from JSON" >> new IntersectionSupport {
 
       override def reqJson[T](url: String)(implicit parser: Parser[T], client: OkHttpClient = new OkHttpClient()): Future[T] =
         Future.successful[T](validIntersection.asInstanceOf[T])
